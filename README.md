@@ -114,7 +114,7 @@ npm run tauri build
 
 ## 致谢
 
-- [DeepSeek] (https://www.deepseek.com/)
-- [Tauri]    (https://tauri.app/)
-- [image-rs] (https://github.com/image-rs/image)
-- [trash-rs] (https://github.com/Byron/trash-rs)
+- [DeepSeek](https://www.deepseek.com/)
+- [Tauri](https://tauri.app/)
+- [image-rs](https://github.com/image-rs/image)
+- [trash-rs](https://github.com/Byron/trash-rs)
