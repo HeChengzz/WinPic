@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WinPic</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ============================================================
+       标题栏
+       ============================================================ -->
+  <header class="titlebar">
+    <div class="tb-left">
+      <img class="app-logo-img" src="./logo.svg" alt="">
+      <span class="tb-title">WinPic</span>
+    </div>
+    <div class="tb-right">
+      <button class="caption-btn" id="btnMin" title="最小化">
+        <svg viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button class="caption-btn" id="btnMax" title="最大化">
+        <svg viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button class="caption-btn close" id="btnClose" title="关闭">
+        <svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1.1"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- ============================================================
+         左侧功能区
+         ============================================================ -->
+    <aside class="sidebar" id="sidebar">
+
+      <div class="sidebar-top">
+        <h2>图库</h2>
+      </div>
+
+      <div class="nav-item active" data-view="all">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="2.5"/>
+            <circle cx="8.5" cy="9.5" r="1.7"/>
+            <path d="M21 15.5 16 10.5 7 20"/>
+          </svg>
+        </span>
+        <span>所有照片</span>
+      </div>
+
+      <div class="nav-item" data-view="fav">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20.3 4.9 13.2a4.6 4.6 0 0 1 0-6.5 4.6 4.6 0 0 1 6.5 0l.6.6.6-.6a4.6 4.6 0 0 1 6.5 0 4.6 4.6 0 0 1 0 6.5z"/>
+          </svg>
+        </span>
+        <span>收藏</span>
+      </div>
+
+      <div class="nav-item" data-view="settings">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </span>
+        <span>设置</span>
+      </div>
+
+      <!-- 目录标题栏 -->
+      <div class="sidebar-top sub">
+        <h2>目录</h2>
+        <div class="sub-actions">
+          <button class="folder-refresh-btn" id="folderRefreshBtn" title="重新扫描所有已导入的目录">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-3.2-6.9"/>
+              <path d="M21 4v5h-5"/>
+            </svg>
+          </button>
+
+          <button class="folder-import-btn" id="folderImportBtn" title="导入">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </button>
+
+          <button class="folder-sort-btn" id="folderSortBtn" title="按首字母排序">
+            <span class="fs-icon" data-icon="name">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h10M4 12h7M4 17h5"/>
+                <path d="M15 13l3-3 3 3M18 10v8"/>
+              </svg>
+            </span>
+            <span class="fs-icon" data-icon="time" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="8.5"/>
+                <path d="M12 7.5V12l3.2 2"/>
+              </svg>
+            </span>
+          </button>
+        </div>
+      </div>
+      <div id="fileList"></div>
+
+      <div class="sidebar-foot">
+        <div class="stat-line">
+          <span class="stat-label">照片</span>
+          <span class="stat-value" id="totalCount">0</span>
+        </div>
+        <div class="stat-line">
+          <span class="stat-label">文件夹</span>
+          <span class="stat-value" id="folderCount">0</span>
+        </div>
+        <div class="stat-line">
+          <span class="stat-label">存储占用</span>
+          <span class="stat-value" id="totalSize">0</span>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ============================================================
+         右侧内容区
+         ============================================================ -->
+    <section class="content">
+
+      <div class="toolbar" id="toolbar">
+        <div class="toolbar-left">
+          <h1 class="page-title" id="pageTitle">所有照片</h1>
+          <span class="page-count" id="pageCount"></span>
+        </div>
+
+        <div class="toolbar-right">
+          <div class="search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <circle cx="11" cy="11" r="6.8"/>
+              <path d="M20 20l-3.6-3.6"/>
+            </svg>
+            <input type="text" id="searchInput" placeholder="搜索照片" autocomplete="off">
+          </div>
+
+          <button class="icon-btn" id="sortDateBtn" title="按时间排序">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="8.5"/>
+              <path d="M12 7v5l3.5 2"/>
+            </svg>
+          </button>
+
+          <button class="icon-btn" id="sortNameBtn" title="按名称排序">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 7h16M4 12h10M4 17h6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="scroll-area" id="scrollArea">
+        <div class="grid" id="grid"></div>
+        <div class="empty" id="empty" hidden></div>
+      </div>
+
+      <!-- 设置面板 -->
+      <div class="settings-panel" id="settingsPanel" hidden>
+        <div class="settings-inner">
+
+          <div class="settings-head">
+            <h1 class="settings-title">设置</h1>
+            <p class="settings-sub">个性化你的浏览体验</p>
+          </div>
+
+          <!-- ============ 主题外观 ============ -->
+          <div class="set-group">
+            <div class="set-group-title">主题外观</div>
+            <div class="set-card">
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>主题颜色</span>
+                  <small>选择应用的整体配色方案</small>
+                </div>
+                <div class="seg" id="themeSeg">
+                  <button data-theme="light">浅色</button>
+                  <button data-theme="dark">深色</button>
+                  <button data-theme="system" class="on">跟随系统</button>
+                </div>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>清爽模式</span>
+                  <small>隐藏设置项下方的说明文字</small>
+                </div>
+                <div class="seg" id="compactSeg">
+                  <button data-compact="off" class="on">关闭</button>
+                  <button data-compact="partial">局部开启</button>
+                  <button data-compact="on">开启</button>
+                </div>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>卡片动画</span>
+                  <small>加载与悬停时的过渡效果</small>
+                </div>
+                <label class="toggle">
+                  <input type="checkbox" id="animSwitch" checked>
+                  <span class="toggle-track">
+                    <span class="toggle-label" data-state="off">关闭</span>
+                    <span class="toggle-label" data-state="on">开启</span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>透明强度</span>
+                  <small>窗口各部分的亚克力半透明程度</small>
+                </div>
+                <div class="seg" id="acrylicSeg">
+                  <button data-acrylic="off">关闭</button>
+                  <button data-acrylic="low" class="on">弱</button>
+                  <button data-acrylic="mid" >中</button>
+                  <button data-acrylic="high">强</button>
+                </div>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>渐变模式</span>
+                  <small>选择背景渐变的方向</small>
+                </div>
+                <div class="seg" id="gradModeSeg">
+                  <button data-mode="vertical">垂直</button>
+                  <button data-mode="horizontal" class="on">水平</button>
+                  <button data-mode="diagonal" >对角</button>
+                </div>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>渐变颜色</span>
+                  <small>选择起始色和结束色</small>
+                </div>
+                <div class="grad-colors">
+                  <input type="color" id="gradColor1" value="#3B82F6" title="起始色">
+                  <span class="grad-arrow">→</span>
+                  <input type="color" id="gradColor2" value="#06B6D4" title="结束色">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ 字体 ============ -->
+          <div class="set-group">
+            <div class="set-group-title">字体</div>
+            <div class="set-card">
+              <div class="set-row">
+                <div class="set-label">
+                  <span>字体大小</span>
+                  <small>调整应用内所有文字的大小</small>
+                </div>
+                <div class="seg" id="fontSizeSeg">
+                  <button data-fs="small">小</button>
+                  <button data-fs="medium" class="on">中</button>
+                  <button data-fs="large">大</button>
+                </div>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>应用字体</span>
+                  <small>选择应用的整体字体</small>
+                </div>
+                <select class="select" id="fontSelect">
+                  <option value="system">系统默认</option>
+                  <option value="yahei">微软雅黑</option>
+                  <option value="dengxian">等线</option>
+                  <option value="simsun">宋体</option>
+                  <option value="simhei">黑体</option>
+                  <option value="kaiti">楷体</option>
+                </select>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>导入字体</span>
+                  <small>支持 .ttf / .otf / .woff / .woff2 格式</small>
+                </div>
+                <div class="set-actions">
+                  <button class="btn danger" id="removeFontBtn" hidden>删除</button>
+                  <button class="btn accent" id="importFontBtn">选择字体文件</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ 查看器外观 ============ -->
+          <div class="set-group">
+            <div class="set-group-title">查看器外观</div>
+            <div class="set-card">
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>背景虚化</span>
+                  <small>查看器打开时，用当前图片的虚化副本作为背景</small>
+                </div>
+                <label class="toggle">
+                  <input type="checkbox" id="blurSwitch" checked>
+                  <span class="toggle-track">
+                    <span class="toggle-label" data-state="off">关闭</span>
+                    <span class="toggle-label" data-state="on">开启</span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>显示日期</span>
+                  <small>在缩略图悬停时显示修改日期</small>
+                </div>
+                <label class="toggle">
+                  <input type="checkbox" id="dateSwitch" checked>
+                  <span class="toggle-track">
+                    <span class="toggle-label" data-state="off">关闭</span>
+                    <span class="toggle-label" data-state="on">开启</span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>显示文件名</span>
+                  <small>在缩略图悬停时显示文件名称</small>
+                </div>
+                <label class="toggle">
+                  <input type="checkbox" id="nameSwitch" checked>
+                  <span class="toggle-track">
+                    <span class="toggle-label" data-state="off">关闭</span>
+                    <span class="toggle-label" data-state="on">开启</span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>缩略图比例</span>
+                  <small>调整卡片的宽高比</small>
+                </div>
+                <div class="seg" id="ratioSeg">
+                  <button data-ratio="1:1">1:1</button>
+                  <button data-ratio="4:3" class="on">4:3</button>
+                  <button data-ratio="16:9">16:9</button>
+                </div>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>缩略图大小</span>
+                  <small>调整网格中图片的显示尺寸</small>
+                </div>
+                <div class="slider-wrap">
+                  <input type="range" id="sizeRange" min="100" max="280" step="4" value="172">
+                  <span class="slider-val" id="sizeVal">172</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ 数据 ============ -->
+          <div class="set-group">
+            <div class="set-group-title">数据</div>
+            <div class="set-card">
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>关于</span>
+                  <small>版本信息与项目说明</small>
+                </div>
+                <button class="btn" id="aboutBtn">查看</button>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>使用文档</span>
+                  <small>查看操作说明与快捷键</small>
+                </div>
+                <button class="btn" id="docsBtn">查看</button>
+              </div>
+
+              <div class="set-row">
+                <div class="set-label">
+                  <span>恢复默认设置</span>
+                  <small>将以上选项还原为初始状态</small>
+                </div>
+                <button class="btn" id="resetBtn">重置</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+  </div>
+</div>
+
+<!-- ============================================================
+     导入菜单（点击左侧「+」弹出）
+     ============================================================ -->
+<div class="import-menu" id="importMenu" hidden>
+  <button class="import-menu-item" id="importFilesMenu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2.5"/>
+      <circle cx="8.5" cy="9.5" r="1.7"/>
+      <path d="M21 15.5 16 10.5 7 20"/>
+    </svg>
+    <span>导入照片</span>
+  </button>
+  <button class="import-menu-item" id="importFolderMenu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3.5 7.4a2 2 0 0 1 2-2h3.1a1 1 0 0 1 .8.4l1.2 1.6h8a2 2 0 0 1 2 2v7.4a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>
+    </svg>
+    <span>导入文件夹</span>
+  </button>
+</div>
+
+<!-- ============================================================
+     查看器
+     ============================================================ -->
+<div class="viewer" id="viewer" hidden>
+  <div class="viewer-backdrop">
+    <img id="viewerBlurImg" src="" alt="">
+  </div>
+
+  <!-- 图片舞台 -->
+  <div class="viewer-stage" id="viewerStage">
+    <img id="viewerImg" src="" alt="">
+  </div>
+
+  <!-- 顶部：左工具 / 右关闭 -->
+  <div class="viewer-toolbar">
+    <div class="vt-actions">
+      <button class="v-btn" id="viewerFav" title="收藏">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 20.3 4.9 13.2a4.6 4.6 0 0 1 0-6.5 4.6 4.6 0 0 1 6.5 0l.6.6.6-.6a4.6 4.6 0 0 1 6.5 0 4.6 4.6 0 0 1 0 6.5z"/>
+        </svg>
+      </button>
+
+      <button class="v-btn" id="viewerWallpaper" title="设为壁纸">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2.5" y="4" width="19" height="13" rx="2"/>
+          <path d="M8 20h8M12 17v3"/>
+        </svg>
+      </button>
+
+      <button class="v-btn" id="viewerRename" title="重命名">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+        </svg>
+      </button>
+
+      <button class="v-btn" id="viewerRotateSave" title="保存旋转" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 5v5h-5"/>
+          <path d="M20.5 14a8 8 0 1 1-1.9-8.4L21 10"/>
+          <path d="M9 14.5l2 2 4-4.5"/>
+        </svg>
+      </button>
+
+      <span class="vt-sep"></span>
+
+      <button class="v-btn" id="viewerCopyPath" title="复制路径">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="12" height="12" rx="2"/>
+          <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+        </svg>
+      </button>
+
+      <button class="v-btn" id="viewerReveal" title="在资源管理器中显示">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3.5 7.4a2 2 0 0 1 2-2h3.1a1 1 0 0 1 .8.4l1.2 1.6h8a2 2 0 0 1 2 2v7.4a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>
+        </svg>
+      </button>
+
+      <button class="v-btn" id="viewerMove" title="移动到…">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3.5 7.4a2 2 0 0 1 2-2h3.1a1 1 0 0 1 .8.4l1.2 1.6h8a2 2 0 0 1 2 2v7.4a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>
+          <path d="M9 14h6M12 11l3 3-3 3"/>
+        </svg>
+      </button>
+
+      <button class="v-btn" id="viewerDelete" title="删除到回收站">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>
+          <path d="M10 11v6M14 11v6"/>
+        </svg>
+      </button>
+
+      <button class="v-btn" id="viewerOpenWith" title="以其他软件打开">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 3h6v6"/>
+          <path d="M10 14 21 3"/>
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+        </svg>
+      </button>
+    </div>
+
+    <button class="v-btn close standalone" id="viewerClose" title="关闭 (Esc)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- 左右翻页 -->
+  <button class="viewer-nav prev" id="viewerPrev" title="上一张 (←)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 5l-7 7 7 7"/>
+    </svg>
+  </button>
+
+  <button class="viewer-nav next" id="viewerNext" title="下一张 (→)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 5l7 7-7 7"/>
+    </svg>
+  </button>
+
+  <!-- 底部信息：页码 + 文件名 + 元信息 -->
+  <div class="viewer-caption">
+    <div class="vc-line1">
+      <span id="viewerCounter">1 / 1</span>
+      <span class="vc-sep-dot"></span>
+      <span id="zoomLabel">70%</span>
+    </div>
+    <div class="vc-line2" id="viewerTitle"></div>
+    <div class="vc-line3" id="viewerSub"></div>
+  </div>
+
+  <!-- 处理中遮罩 -->
+  <div class="viewer-busy" id="viewerBusy" hidden>
+    <span class="busy-spinner"></span>
+    <span>处理中…</span>
+  </div>
+</div>
+
+<!-- ============================================================
+     重命名对话框
+     ============================================================ -->
+<div class="rename-dialog" id="renameDialog" hidden>
+  <div class="rename-backdrop"></div>
+  <div class="rename-box">
+    <h3 class="rename-title">重命名</h3>
+    <input type="text" class="rename-input" id="renameInput" placeholder="输入新的文件名" autocomplete="off" spellcheck="false">
+    <div class="rename-actions">
+      <button class="btn" id="renameCancel">取消</button>
+      <button class="btn accent" id="renameConfirm">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     移动到对话框
+     ============================================================ -->
+<div class="move-dialog" id="moveDialog" hidden>
+  <div class="move-backdrop"></div>
+  <div class="move-box">
+    <h3 class="move-title">移动到</h3>
+    <div class="move-list" id="moveList"></div>
+    <div class="move-foot">
+      <button class="btn" id="movePickOther">选择其他文件夹…</button>
+      <div class="move-foot-right">
+        <button class="btn" id="moveCancel">取消</button>
+        <button class="btn accent" id="moveConfirm">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     使用文档对话框
+     ============================================================ -->
+<div class="docs-dialog" id="docsDialog" hidden>
+  <div class="docs-backdrop"></div>
+  <div class="docs-box">
+    <div class="docs-head">
+      <h3 class="docs-title">使用文档</h3>
+      <button class="docs-close" id="docsCloseBtn" title="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="docs-body">
+
+      <div class="docs-section">
+        <h4>浏览</h4>
+        <div class="docs-kv">
+          <div class="docs-kv-row">
+            <span>打开照片</span>
+            <span><kbd>Enter</kbd> 或 <kbd>Space</kbd>（光标在卡片上时）</span>
+          </div>
+          <div class="docs-kv-row">
+            <span>上一张 / 下一张</span>
+            <span><kbd>A</kbd> <kbd>←</kbd> &nbsp;·&nbsp; <kbd>D</kbd> <kbd>→</kbd></span>
+          </div>
+          <div class="docs-kv-row">
+            <span>缩放</span>
+            <span>滚轮 &nbsp;·&nbsp; <kbd>+</kbd> <kbd>-</kbd></span>
+          </div>
+          <div class="docs-kv-row">
+            <span>精细缩放</span>
+            <span><kbd>Shift</kbd> + 滚轮</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="docs-section">
+        <h4>旋转</h4>
+        <div class="docs-kv">
+          <div class="docs-kv-row">
+            <span>逆时针 90°</span>
+            <span><kbd>W</kbd> 或 <kbd>↑</kbd></span>
+          </div>
+          <div class="docs-kv-row">
+            <span>顺时针 90°</span>
+            <span><kbd>S</kbd> 或 <kbd>↓</kbd></span>
+          </div>
+          <div class="docs-kv-row">
+            <span>慢速旋转（按住）</span>
+            <span><kbd>Shift</kbd> + <kbd>W</kbd> / <kbd>S</kbd></span>
+          </div>
+          <div class="docs-kv-row">
+            <span>保存旋转结果</span>
+            <span>查看器顶部「保存旋转」按钮</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="docs-section">
+        <h4>重置与关闭</h4>
+        <div class="docs-kv">
+          <div class="docs-kv-row">
+            <span>重置缩放 / 位移 / 旋转</span>
+            <span><kbd>R</kbd> <kbd>0</kbd> 或双击图片</span>
+          </div>
+          <div class="docs-kv-row">
+            <span>关闭查看器</span>
+            <span><kbd>Esc</kbd></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="docs-section">
+        <h4>文件操作</h4>
+        <div class="docs-kv">
+          <div class="docs-kv-row">
+            <span>导入</span>
+            <span>点击左侧「目录」右侧的 <kbd>+</kbd> 按钮</span>
+          </div>
+          <div class="docs-kv-row">
+            <span>刷新目录</span>
+            <span>点击「目录」右侧的刷新按钮</span>
+          </div>
+          <div class="docs-kv-row">
+            <span>收藏</span>
+            <span>悬停缩略图，点击右上角爱心</span>
+          </div>
+          <div class="docs-kv-row">
+            <span>重命名 / 移动 / 删除</span>
+            <span>查看器顶部对应按钮</span>
+          </div>
+          <div class="docs-kv-row">
+            <span>设为壁纸</span>
+            <span>查看器顶部「设为壁纸」</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="docs-section">
+        <h4>支持的图片格式</h4>
+        <div class="docs-kv">
+          <div class="docs-kv-row">
+            <span>常见格式</span>
+            <span>png · jpg · jpeg · gif · webp · bmp · svg · avif · ico · tiff</span>
+          </div>
+          <div class="docs-kv-row">
+            <span>不支持保存旋转</span>
+            <span>gif · svg</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     关于对话框
+     ============================================================ -->
+<div class="about-dialog" id="aboutDialog" hidden>
+  <div class="about-backdrop"></div>
+  <div class="about-box">
+    <div class="about-head">
+      <h3 class="about-title">关于</h3>
+      <button class="about-close" id="aboutCloseBtn" title="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="about-body">
+
+      <div class="about-hero">
+        <img class="about-logo" src="./logo.svg" alt="">
+        <div class="about-hero-text">
+          <h2 class="about-name">WinPic</h2>
+          <p class="about-version">版本 0.1.0</p>
+        </div>
+      </div>
+
+      <p class="about-desc">
+        一款轻量的本地图库工具，专注于浏览与管理本地照片。
+        支持多目录导入、缩略图缓存、旋转、移动、删除到回收站等常用操作。
+      </p>
+
+      <div class="about-section">
+        <h4>技术栈</h4>
+        <div class="about-kv">
+          <div class="about-kv-row">
+            <span>桌面框架</span>
+            <span>Tauri 2</span>
+          </div>
+          <div class="about-kv-row">
+            <span>前端</span>
+            <span>原生 HTML · CSS · JavaScript</span>
+          </div>
+          <div class="about-kv-row">
+            <span>后端</span>
+            <span>Rust</span>
+          </div>
+          <div class="about-kv-row">
+            <span>图片处理</span>
+            <span>image crate</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="about-section">
+        <h4>数据说明</h4>
+        <p class="about-note">
+          应用仅在本机保存图片路径与偏好设置（localStorage），
+          不会上传、修改或删除你的原始文件——除了你在应用内显式执行的操作（重命名、旋转、移动、删除到回收站）。
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
