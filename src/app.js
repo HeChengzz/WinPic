@@ -258,7 +258,7 @@ async function restoreCustomFonts() {
 /* =========================================================
    持久化存储
    ========================================================= */
-const STORAGE_KEY = 'win11-gallery-state-v1';
+const STORAGE_KEY = 'winpic';
 let saveTimer = null;
 
 function scheduleSave() {

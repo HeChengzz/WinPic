@@ -2,7 +2,12 @@
 
 一款轻量的本地图库工具，专注于浏览与管理本地照片。
 
----
+## 截图
+
+<p align="center">
+  <img src="./showpic/main.png" width="48%" />
+  <img src="./showpic/settings.png" width="48%" />
+</p>
 
 ## 特性
 
@@ -20,8 +25,6 @@
 - **Node.js** ≥ 18
 - **Rust** ≥ 1.77（推荐用 [rustup](https://rustup.rs/) 安装）
 - **Windows**：需要 [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)（Win10/11 一般已预装）
-- **macOS**：Xcode Command Line Tools
-- **Linux**：`webkit2gtk`、`libayatana-appindicator3-dev` 等，详见 [Tauri 官方文档](https://tauri.app/start/prerequisites/)
 
 ## 快速开始
 
@@ -39,8 +42,6 @@ npm run tauri build
 打包产物位置：
 
 - Windows：`src-tauri/target/release/bundle/nsis/` 和 `bundle/msi/`
-- macOS：`src-tauri/target/release/bundle/dmg/`
-- Linux：`src-tauri/target/release/bundle/appimage/` 和 `deb/`
 
 ## 快捷键
 
@@ -94,18 +95,6 @@ WinPic/
 ├── vite.config.js
 └── README.md
 ```
-
-## 打包说明
-
-### Windows
-
-```bash
-npm run tauri build
-```
-
-### macOS / Linux
-
-需在对应系统上构建（或使用 GitHub Actions 矩阵构建）。发布到终端用户前，macOS 需要 Apple 开发者账号做公证（Notarization）。
 
 ## 许可证
 
