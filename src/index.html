@@ -102,6 +102,14 @@
                 <path d="M12 7.5V12l3.2 2"/>
               </svg>
             </span>
+            <span class="fs-icon" data-icon="custom" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 4v16"/>
+                <path d="M8 4l-3 3M8 4l3 3"/>
+                <path d="M16 20V4"/>
+                <path d="M16 20l-3-3M16 20l3-3"/>
+              </svg>
+            </span>
           </button>
         </div>
       </div>
@@ -427,8 +435,15 @@
     </svg>
     <span>导入文件夹</span>
   </button>
+   <button class="import-menu-item" id="importNewFolderMenu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3.5 7.4a2 2 0 0 1 2-2h3.1a1 1 0 0 1 .8.4l1.2 1.6h8a2 2 0 0 1 2 2v7.4a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>
+      <path d="M12 11v6M9 14h6"/>
+    </svg>
+    <span>新建文件夹</span>
+  </button>
 </div>
-
+ 
 <!-- ============================================================
      查看器
      ============================================================ -->
@@ -581,6 +596,48 @@
     </div>
   </div>
 </div>
+
+<!-- ============================================================
+     移除文件夹对话框
+     ============================================================ -->
+<div class="folder-remove-dialog" id="folderRemoveDialog" hidden>
+  <div class="folder-remove-backdrop"></div>
+  <div class="folder-remove-box">
+    <h3 class="folder-remove-title">移除文件夹</h3>
+    <p class="folder-remove-name" id="folderRemoveName"></p>
+    <p class="folder-remove-hint" id="folderRemoveHint"></p>
+
+    <div class="folder-remove-options">
+      <button class="folder-remove-option" data-action="gallery">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3l18 18"/>
+          <path d="M10.5 5.5A8.4 8.4 0 0 1 12 5.5c5 0 9 4 10 6.5-.5 1-1.4 2.3-2.7 3.5"/>
+          <path d="M6.2 6.3C3.9 7.8 2.5 9.7 2 11.5c1 2.5 5 6.5 10 6.5 1.7 0 3.3-.5 4.7-1.2"/>
+          <circle cx="12" cy="11.5" r="2.5"/>
+        </svg>
+        <div class="folder-remove-option-text">
+          <span>仅从图库移除</span>
+          <small>本地文件保持不变</small>
+        </div>
+      </button>
+
+      <button class="folder-remove-option danger" data-action="trash">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>
+          <path d="M10 11v6M14 11v6"/>
+        </svg>
+        <div class="folder-remove-option-text">
+          <span>删除到回收站</span>
+          <small>同时删除本地文件夹及其所有内容</small>
+        </div>
+      </button>
+    </div>
+
+    <div class="folder-remove-actions">
+      <button class="btn" id="folderRemoveCancel">取消</button>
+    </div>
+  </div>
+</div>  
 
 <!-- ============================================================
      使用文档对话框

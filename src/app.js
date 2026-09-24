@@ -83,6 +83,13 @@ function getFileExt(name) {
   return name.slice(dot + 1).toLowerCase();
 }
 
+function isValidFolderName(name) {
+  if (!name) return false;
+  if (name === '.' || name === '..') return false;
+  if (/[\\/:*?"<>|]/.test(name)) return false;
+  return true;
+}
+
 /* =========================================================
    Toast
    ========================================================= */
@@ -145,7 +152,7 @@ const state = {
   folderName: null,
   query: '',
   favorites: new Set(),
-    settings: {
+  settings: {
     theme: 'system',
     gradMode: 'horizontal',
     gradColor1: '#3B82F6',
@@ -167,7 +174,8 @@ const state = {
     expandedFolders: [],
     folderImportTime: {},
     folderSort: 'name',
-    folderPaths: {}
+    folderPaths: {},
+    folderOrder: []
   }
 };
 
@@ -256,9 +264,8 @@ async function restoreCustomFonts() {
 }
 
 /* =========================================================
-   持久化存储
+   持久化存储（写到 exe 同级的 data/state.json）
    ========================================================= */
-const STORAGE_KEY = 'winpic';
 let saveTimer = null;
 
 function scheduleSave() {
@@ -266,7 +273,7 @@ function scheduleSave() {
   saveTimer = setTimeout(saveState, 200);
 }
 
-function saveState() {
+async function saveState() {
   try {
     const data = {
       settings: state.settings,
@@ -279,7 +286,7 @@ function saveState() {
         size: p.size
       }))
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    await invoke('save_state_file', { content: JSON.stringify(data) });
   } catch (err) {
     console.error('保存失败：', err);
   }
@@ -287,7 +294,13 @@ function saveState() {
 
 async function loadState() {
   let raw = null;
-  try { raw = localStorage.getItem(STORAGE_KEY); } catch (_) { return; }
+  try {
+    raw = await invoke('load_state_file');
+  } catch (err) {
+    console.error('读取状态文件失败：', err);
+    return;
+  }
+
   if (!raw) return;
 
   let data;
@@ -308,20 +321,23 @@ async function loadState() {
   if (!Array.isArray(state.settings.expandedFolders)) {
     state.settings.expandedFolders = [];
   }
+  if (!Array.isArray(state.settings.folderOrder)) {
+    state.settings.folderOrder = [];
+  }
   if (!state.settings.folderImportTime || typeof state.settings.folderImportTime !== 'object') {
     state.settings.folderImportTime = {};
   }
   if (!state.settings.folderPaths || typeof state.settings.folderPaths !== 'object') {
     state.settings.folderPaths = {};
   }
-  if (state.settings.folderSort !== 'time') {
+  if (!['name', 'time', 'custom'].includes(state.settings.folderSort)) {
     state.settings.folderSort = 'name';
   }
   if (!state.settings.cardRatio) {
     state.settings.cardRatio = '4:3';
   }
 
-    if (!GRAD_MODES[state.settings.gradMode]) {
+  if (!GRAD_MODES[state.settings.gradMode]) {
     state.settings.gradMode = 'horizontal';
   }
   if (!/^#[0-9a-fA-F]{6}$/.test(state.settings.gradColor1 || '')) {
@@ -559,6 +575,7 @@ const rotateSaveBtn = document.getElementById('viewerRotateSave');
 
 const renameDialog  = document.getElementById('renameDialog');
 const renameInput   = document.getElementById('renameInput');
+const renameTitleEl = renameDialog.querySelector('.rename-title');
 
 const moveDialog = document.getElementById('moveDialog');
 const moveList   = document.getElementById('moveList');
@@ -570,6 +587,10 @@ const docsCloseBtn = document.getElementById('docsCloseBtn');
 const aboutDialog   = document.getElementById('aboutDialog');
 const aboutBtn      = document.getElementById('aboutBtn');
 const aboutCloseBtn = document.getElementById('aboutCloseBtn');
+
+const folderRemoveDialog  = document.getElementById('folderRemoveDialog');
+const folderRemoveNameEl  = document.getElementById('folderRemoveName');
+const folderRemoveHintEl  = document.getElementById('folderRemoveHint');
 
 const fontSelect     = document.getElementById('fontSelect');
 const fontSizeSeg    = document.getElementById('fontSizeSeg');
@@ -593,6 +614,7 @@ const folderImportBtn  = document.getElementById('folderImportBtn');
 const importMenu       = document.getElementById('importMenu');
 const importFilesMenu  = document.getElementById('importFilesMenu');
 const importFolderMenu = document.getElementById('importFolderMenu');
+const importNewFolderMenu = document.getElementById('importNewFolderMenu');
 
 const FOLDER_ICON = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -658,6 +680,11 @@ importFilesMenu.addEventListener('click', () => {
 importFolderMenu.addEventListener('click', () => {
   hideImportMenu();
   importFolderViaTauri();
+});
+
+importNewFolderMenu.addEventListener('click', () => {
+  hideImportMenu();
+  startCreateFolder();
 });
 
 document.addEventListener('mousedown', e => {
@@ -842,15 +869,6 @@ async function loadFolder(rootDir) {
   });
   state.settings.knownFolders = [...knownSet];
 
-  const expanded = new Set(state.settings.expandedFolders || []);
-  foundFolders.forEach(path => {
-    const parts = path.split('/');
-    for (let i = 1; i < parts.length; i++) {
-      expanded.add(parts.slice(0, i).join('/'));
-    }
-  });
-  state.settings.expandedFolders = [...expanded];
-
   items.forEach(it => {
     PHOTOS.push({
       id: nextId++,
@@ -921,6 +939,8 @@ async function refreshAllFolders() {
         .filter(n => n !== rootName && !n.startsWith(prefix));
       state.settings.expandedFolders = (state.settings.expandedFolders || [])
         .filter(n => n !== rootName && !n.startsWith(prefix));
+      state.settings.folderOrder = (state.settings.folderOrder || [])
+        .filter(n => n !== rootName);
       delete state.settings.folderPaths[rootName];
       changed++;
       continue;
@@ -944,15 +964,6 @@ async function refreshAllFolders() {
       markFolderImported(f);
     });
     state.settings.knownFolders = [...knownSet];
-
-    const expanded = new Set(state.settings.expandedFolders);
-    foundFolders.forEach(path => {
-      const parts = path.split('/');
-      for (let i = 1; i < parts.length; i++) {
-        expanded.add(parts.slice(0, i).join('/'));
-      }
-    });
-    state.settings.expandedFolders = [...expanded];
 
     items.forEach(it => {
       PHOTOS.push({
@@ -1055,17 +1066,41 @@ function buildFolderTree() {
   const times = state.settings.folderImportTime || {};
   const mode = state.settings.folderSort || 'name';
 
-  const comparator = mode === 'time'
-    ? (a, b) => compareFolderTime(a, b, times)
-    : compareFolderName;
+  let rootComparator;
+  if (mode === 'custom') {
+    const order = Array.isArray(state.settings.folderOrder) ? state.settings.folderOrder : [];
+    const rootPaths = roots.map(r => r.path);
+    const filtered = order.filter(p => rootPaths.includes(p));
+    for (const p of rootPaths) {
+      if (!filtered.includes(p)) filtered.push(p);
+    }
+    state.settings.folderOrder = filtered;
+
+    const idxOf = (p) => {
+      const i = filtered.indexOf(p);
+      return i >= 0 ? i : 99999;
+    };
+    rootComparator = (a, b) => {
+      const ia = idxOf(a.path);
+      const ib = idxOf(b.path);
+      if (ia !== ib) return ia - ib;
+      return compareFolderName(a, b);
+    };
+  } else if (mode === 'time') {
+    rootComparator = (a, b) => compareFolderTime(a, b, times);
+  } else {
+    rootComparator = compareFolderName;
+  }
+
+  const childComparator = compareFolderName;
 
   function sortTree(node) {
-    node.children.sort(comparator);
+    node.children.sort(childComparator);
     node.children.forEach(sortTree);
   }
 
   roots.forEach(sortTree);
-  roots.sort(comparator);
+  roots.sort(rootComparator);
 
   return roots;
 }
@@ -1088,19 +1123,30 @@ function renderNode(node, depth, expanded) {
   const isExpanded = expanded.has(node.path);
   const indent = depth * 16;
   const isActive = state.view === 'folder' && state.folderName === node.path;
+  const isRoot = depth === 0;
 
   const icon = hasChildren ? FOLDER_ICON_OPEN : FOLDER_ICON;
+
+  const dragAttrs = isRoot
+    ? ' data-root="1"'
+    : ' data-root="0"';
 
   const selfHtml = `
     <div class="nav-item folder-item${isActive ? ' active' : ''}"
          data-view="folder"
          data-folder="${escapeHtml(node.path)}"
-         data-has-children="${hasChildren ? '1' : '0'}"
+         data-has-children="${hasChildren ? '1' : '0'}"${dragAttrs}
          style="padding-left: ${10 + indent}px"
          title="${escapeHtml(node.path)}">
       <span class="folder-ico">${icon}</span>
       <span class="folder-name">${escapeHtml(node.name)}</span>
       <span class="file-tail">
+        <button class="file-rename" data-rename-folder="${escapeHtml(node.path)}" title="重命名">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+          </svg>
+        </button>
         <button class="file-remove" data-remove-folder="${escapeHtml(node.path)}" title="移除该目录">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
             <path d="M6 6l12 12M18 6L6 18"/>
@@ -1127,20 +1173,298 @@ function renderFileList() {
 function syncFolderSortBtn() {
   if (!folderSortBtn) return;
   const mode = state.settings.folderSort || 'name';
-  folderSortBtn.title = mode === 'time' ? '按导入时间排序' : '按首字母排序';
+
+  const titles = {
+    name:   '按首字母排序',
+    time:   '按导入时间排序',
+    custom: '自定义排序（可拖动根目录）'
+  };
+  folderSortBtn.title = titles[mode] || titles.name;
 
   const icons = folderSortBtn.querySelectorAll('.fs-icon');
   icons.forEach(el => {
     el.hidden = el.dataset.icon !== mode;
   });
+
+  document.body.classList.toggle('folder-custom', mode === 'custom');
 }
 
 folderSortBtn.addEventListener('click', () => {
-  state.settings.folderSort = state.settings.folderSort === 'time' ? 'name' : 'time';
+  const mode = state.settings.folderSort || 'name';
+  const next = mode === 'name' ? 'time'
+             : mode === 'time' ? 'custom'
+             : 'name';
+  state.settings.folderSort = next;
   syncFolderSortBtn();
   renderFileList();
   scheduleSave();
 });
+
+/* =========================================================
+   目录拖动排序（只允许最外层）
+   ========================================================= */
+let dragState = null;
+
+fileListEl.addEventListener('pointerdown', e => {
+  if (state.settings.folderSort !== 'custom') return;
+  if (e.button !== 0) return;
+
+  if (e.target.closest('.file-remove')) return;
+  if (e.target.closest('.file-rename')) return;
+
+  const item = e.target.closest('.folder-item');
+  if (!item || item.dataset.root !== '1') return;
+
+  dragState = {
+    path: item.dataset.folder,
+    el: item,
+    startX: e.clientX,
+    startY: e.clientY,
+    active: false,
+    pointerId: e.pointerId
+  };
+});
+
+fileListEl.addEventListener('pointermove', e => {
+  if (!dragState) return;
+  if (e.pointerId !== dragState.pointerId) return;
+
+  const dx = e.clientX - dragState.startX;
+  const dy = e.clientY - dragState.startY;
+
+  if (!dragState.active) {
+    if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+    dragState.active = true;
+    dragState.el.classList.add('dragging');
+    document.body.classList.add('folder-dragging');
+    try { dragState.el.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+
+  e.preventDefault();
+
+  const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
+  const target = elemBelow ? elemBelow.closest('.folder-item[data-root="1"]') : null;
+
+  fileListEl.querySelectorAll('.drop-before, .drop-after').forEach(el => {
+    el.classList.remove('drop-before', 'drop-after');
+  });
+
+  if (target && target !== dragState.el) {
+    const rect = target.getBoundingClientRect();
+    const isAfter = e.clientY > rect.top + rect.height / 2;
+    target.classList.add(isAfter ? 'drop-after' : 'drop-before');
+  }
+});
+
+function endFolderDrag(e) {
+  if (!dragState) return;
+  if (e.pointerId !== dragState.pointerId) return;
+
+  const wasActive = dragState.active;
+  const draggedPath = dragState.path;
+
+  dragState.el.classList.remove('dragging');
+  document.body.classList.remove('folder-dragging');
+  try { dragState.el.releasePointerCapture(e.pointerId); } catch (_) {}
+
+  let targetPath = null;
+  let isAfter = false;
+
+  const dropAfter = fileListEl.querySelector('.drop-after');
+  const dropBefore = fileListEl.querySelector('.drop-before');
+  const dropTarget = dropAfter || dropBefore;
+
+  if (dropTarget) {
+    targetPath = dropTarget.dataset.folder;
+    isAfter = !!dropAfter;
+  }
+
+  fileListEl.querySelectorAll('.drop-before, .drop-after').forEach(el => {
+    el.classList.remove('drop-before', 'drop-after');
+  });
+
+  dragState = null;
+
+  if (!wasActive) return;
+  if (!targetPath || targetPath === draggedPath) return;
+
+  const order = Array.isArray(state.settings.folderOrder)
+    ? [...state.settings.folderOrder]
+    : [];
+
+  if (!order.includes(draggedPath)) order.push(draggedPath);
+  if (!order.includes(targetPath)) order.push(targetPath);
+
+  const srcIdx = order.indexOf(draggedPath);
+  if (srcIdx >= 0) order.splice(srcIdx, 1);
+
+  let insertIdx = order.indexOf(targetPath);
+  if (insertIdx < 0) insertIdx = order.length;
+  if (isAfter) insertIdx += 1;
+
+  order.splice(insertIdx, 0, draggedPath);
+
+  state.settings.folderOrder = order;
+  scheduleSave();
+  renderFileList();
+}
+
+fileListEl.addEventListener('pointerup', endFolderDrag);
+fileListEl.addEventListener('pointercancel', endFolderDrag);
+
+/* =========================================================
+   图片拖动到目录
+   ========================================================= */
+let cardDragState = null;
+let suppressCardClick = false;
+
+grid.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  if (e.target.closest('.fav-toggle')) return;
+
+  const card = e.target.closest('.card');
+  if (!card) return;
+
+  const id = Number(card.dataset.id);
+  const photo = PHOTOS.find(p => p.id === id);
+  if (!photo) return;
+
+  cardDragState = {
+    photo,
+    el: card,
+    startX: e.clientX,
+    startY: e.clientY,
+    active: false,
+    pointerId: e.pointerId,
+    ghost: null,
+    lastTarget: null
+  };
+});
+
+grid.addEventListener('pointermove', e => {
+  if (!cardDragState) return;
+  if (e.pointerId !== cardDragState.pointerId) return;
+
+  const dx = e.clientX - cardDragState.startX;
+  const dy = e.clientY - cardDragState.startY;
+
+  if (!cardDragState.active) {
+    if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+    cardDragState.active = true;
+
+    const ghost = document.createElement('div');
+    ghost.className = 'drag-ghost';
+    const img = document.createElement('img');
+    img.src = cardDragState.photo.thumb || cardDragState.photo.src;
+    img.alt = '';
+    ghost.appendChild(img);
+    document.body.appendChild(ghost);
+    cardDragState.ghost = ghost;
+
+    document.body.classList.add('card-dragging');
+    try { cardDragState.el.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+
+  e.preventDefault();
+
+  if (cardDragState.ghost) {
+    cardDragState.ghost.style.left = e.clientX + 'px';
+    cardDragState.ghost.style.top = e.clientY + 'px';
+  }
+
+  const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
+  const folderItem = elemBelow ? elemBelow.closest('.folder-item') : null;
+
+  if (folderItem !== cardDragState.lastTarget) {
+    document.querySelectorAll('.folder-item.drop-target').forEach(el => {
+      el.classList.remove('drop-target');
+    });
+    if (folderItem) folderItem.classList.add('drop-target');
+    cardDragState.lastTarget = folderItem;
+  }
+});
+
+async function endCardDrag(e) {
+  if (!cardDragState) return;
+  if (e.pointerId !== cardDragState.pointerId) return;
+
+  const dragInfo = cardDragState;
+  cardDragState = null;
+
+  if (dragInfo.ghost && dragInfo.ghost.parentNode) {
+    dragInfo.ghost.parentNode.removeChild(dragInfo.ghost);
+  }
+
+  document.body.classList.remove('card-dragging');
+  try { dragInfo.el.releasePointerCapture(e.pointerId); } catch (_) {}
+
+  document.querySelectorAll('.folder-item.drop-target').forEach(el => {
+    el.classList.remove('drop-target');
+  });
+
+  if (!dragInfo.active) return;
+
+  suppressCardClick = true;
+  setTimeout(() => { suppressCardClick = false; }, 150);
+
+  const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
+  const folderItem = elemBelow ? elemBelow.closest('.folder-item') : null;
+  if (!folderItem) return;
+
+  const targetFolder = folderItem.dataset.folder;
+  if (!targetFolder) return;
+
+  await movePhotoToFolder(dragInfo.photo, targetFolder);
+}
+
+grid.addEventListener('pointerup', endCardDrag);
+grid.addEventListener('pointercancel', endCardDrag);
+
+async function movePhotoToFolder(photo, virtualFolderPath) {
+  if (photo.folder === virtualFolderPath) return;
+
+  const dstDir = folderVirtualToReal(virtualFolderPath);
+  if (!dstDir) {
+    showToast('目标目录不可用');
+    return;
+  }
+
+  const currentDir = photo.path.replace(/[\\/][^\\/]+$/, '');
+  if (normalizePath(currentDir) === normalizePath(dstDir)) {
+    return;
+  }
+
+  try {
+    const oldPath = photo.path;
+    const newPath = await invoke('move_file', { src: oldPath, dstDir });
+
+    invoke('rename_thumbnail_cache', {
+      oldPaths: [oldPath],
+      newPaths: [newPath],
+      size: THUMB_SIZE
+    }).catch(() => {});
+
+    photo.path = newPath;
+    photo.src = convertFileSrc(newPath) + '?t=' + Date.now();
+    photo.thumb = null;
+    photo.folder = virtualFolderPath;
+
+    try {
+      const info = await stat(newPath);
+      photo.size = info.size || photo.size;
+      photo.ts = info.mtime ? new Date(info.mtime).getTime() : photo.ts;
+    } catch (_) {}
+
+    renderFileList();
+    render();
+    updateFooter();
+    scheduleSave();
+
+    showToast('已移动到「' + virtualFolderPath + '」');
+  } catch (err) {
+    alert('移动失败：' + err);
+  }
+}
 
 /* =========================================================
    过滤、排序与标题
@@ -1327,10 +1651,14 @@ sidebar.addEventListener('click', e => {
   const rmF = e.target.closest('.file-remove');
   if (rmF) {
     e.stopPropagation();
-    const name = rmF.dataset.removeFolder;
-    if (confirm(`确定要移除「${name}」及其所有子目录吗？`)) {
-      removeFolder(name);
-    }
+    openFolderRemoveDialog(rmF.dataset.removeFolder);
+    return;
+  }
+
+  const rnF = e.target.closest('.file-rename');
+  if (rnF) {
+    e.stopPropagation();
+    openFolderRenameDialog(rnF.dataset.renameFolder);
     return;
   }
 
@@ -1383,6 +1711,9 @@ function removeFolder(name) {
   state.settings.expandedFolders = (state.settings.expandedFolders || [])
     .filter(n => n !== name && !n.startsWith(prefix));
 
+  state.settings.folderOrder = (state.settings.folderOrder || [])
+    .filter(n => n !== name);
+
   if (state.settings.folderImportTime) {
     for (const key of Object.keys(state.settings.folderImportTime)) {
       if (key === name || key.startsWith(prefix)) {
@@ -1409,6 +1740,370 @@ function removeFolder(name) {
   renderFileList();
   render();
   scheduleSave();
+}
+
+/* =========================================================
+   移除文件夹对话框（仅图库 / 删除到回收站）
+   ========================================================= */
+let folderRemoveTarget = null;
+
+function openFolderRemoveDialog(virtualPath) {
+  if (!virtualPath) return;
+  folderRemoveTarget = virtualPath;
+
+  const isRoot = !virtualPath.includes('/');
+  const isImportedRoot = isRoot && state.settings.folderPaths && state.settings.folderPaths[virtualPath];
+
+  folderRemoveNameEl.textContent = `「${baseName(virtualPath)}」`;
+
+  const trashBtn = folderRemoveDialog.querySelector('[data-action="trash"]');
+
+  if (isImportedRoot) {
+    trashBtn.hidden = true;
+    folderRemoveHintEl.textContent = '这是导入的根文件夹，移除只会从图库中隐藏，本地文件保持不变。';
+  } else {
+    trashBtn.hidden = false;
+    folderRemoveHintEl.textContent = '请选择移除方式：';
+  }
+
+  folderRemoveDialog.hidden = false;
+  folderRemoveDialog.classList.toggle('dark', app.classList.contains('dark'));
+  requestAnimationFrame(() => folderRemoveDialog.classList.add('show'));
+}
+
+function hideFolderRemoveDialog() {
+  if (folderRemoveDialog.hidden) return;
+  folderRemoveDialog.classList.remove('show');
+  setTimeout(() => { folderRemoveDialog.hidden = true; }, 180);
+  folderRemoveTarget = null;
+}
+
+folderRemoveDialog.querySelector('.folder-remove-backdrop')
+  .addEventListener('click', hideFolderRemoveDialog);
+document.getElementById('folderRemoveCancel')
+  .addEventListener('click', hideFolderRemoveDialog);
+
+folderRemoveDialog.querySelectorAll('.folder-remove-option').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const target = folderRemoveTarget;
+    if (!target) { hideFolderRemoveDialog(); return; }
+
+    const action = btn.dataset.action;
+
+    /* ---- 仅从图库移除 ---- */
+    if (action === 'gallery') {
+      hideFolderRemoveDialog();
+      removeFolder(target);
+      return;
+    }
+
+    /* ---- 删除到回收站 ---- */
+    if (action === 'trash') {
+      const realPath = folderVirtualToReal(target);
+      if (!realPath) {
+        alert('无法解析该文件夹的本地路径');
+        hideFolderRemoveDialog();
+        return;
+      }
+
+      try {
+        const ok = await exists(realPath);
+        if (!ok) {
+          showToast('本地文件夹已不存在');
+          hideFolderRemoveDialog();
+          removeFolder(target);
+          return;
+        }
+      } catch (_) {}
+
+      try {
+        await invoke('delete_to_trash', { paths: [realPath] });
+        hideFolderRemoveDialog();
+        removeFolder(target);
+        showToast('已删除到回收站');
+      } catch (err) {
+        console.error('删除失败：', err);
+        alert('删除失败：' + err);
+      }
+    }
+  });
+});
+
+/* =========================================================
+   文件夹重命名 / 新建子目录
+   ========================================================= */
+let renameDialogMode = 'file';
+let renameTargetPath = null;
+
+function openFolderRenameDialog(virtualPath) {
+  renameDialogMode = 'folder';
+  renameTargetPath = virtualPath;
+
+  renameInput.value = baseName(virtualPath);
+  renameTitleEl.textContent = '重命名文件夹';
+  renameInput.placeholder = '输入新的文件夹名';
+
+  renameDialog.hidden = false;
+  requestAnimationFrame(() => {
+    renameDialog.classList.add('show');
+    renameInput.focus();
+    renameInput.select();
+  });
+}
+
+function openCreateFolderDialog(parentVirtualPath) {
+  renameDialogMode = 'newFolder';
+  renameTargetPath = parentVirtualPath;
+
+  renameInput.value = '';
+  renameTitleEl.textContent = '新建文件夹';
+  renameInput.placeholder = '输入文件夹名';
+
+  renameDialog.hidden = false;
+  requestAnimationFrame(() => {
+    renameDialog.classList.add('show');
+    renameInput.focus();
+  });
+}
+
+/* =========================================================
+   新建文件夹：根据是否选中文件夹判断创建位置
+   ========================================================= */
+async function startCreateFolder() {
+  /* 情况 A：已经选中了某个文件夹 → 在该文件夹下创建子目录 */
+  if (state.view === 'folder' && state.folderName) {
+    openCreateFolderDialog(state.folderName);
+    return;
+  }
+
+  /* 情况 B：未选中文件夹 → 让用户选择位置，创建一级目录 */
+  let parentDir;
+  try {
+    parentDir = await open({
+      directory: true,
+      multiple: false,
+      title: '选择新文件夹的创建位置'
+    });
+  } catch (err) {
+    alert('打开对话框失败：' + err);
+    return;
+  }
+  if (!parentDir) return;
+
+  /* 先看它是不是在某个已导入的根目录下 */
+  let parentVirtual = resolveVirtualForRealDir(parentDir);
+
+  /* 不在任何已导入目录下 → 把它注册为新的根目录 */
+  if (!parentVirtual) {
+    const folderPaths = state.settings.folderPaths || (state.settings.folderPaths = {});
+
+    let rootName = baseName(parentDir) || parentDir;
+    let finalName = rootName;
+    let suffix = 1;
+    while (
+      folderPaths[finalName] &&
+      normalizePath(folderPaths[finalName]) !== normalizePath(parentDir)
+    ) {
+      finalName = `${rootName} (${suffix++})`;
+    }
+    rootName = finalName;
+
+    folderPaths[rootName] = parentDir;
+
+    const knownSet = new Set(state.settings.knownFolders || []);
+    knownSet.add(rootName);
+    state.settings.knownFolders = [...knownSet];
+    markFolderImported(rootName);
+
+    parentVirtual = rootName;
+    renderFileList();
+  }
+
+  openCreateFolderDialog(parentVirtual);
+}
+
+/* 由物理目录反查虚拟路径 */
+function resolveVirtualForRealDir(realDir) {
+  const folderPaths = state.settings.folderPaths || {};
+  for (const [rootName, rootDir] of Object.entries(folderPaths)) {
+    if (isInDir(realDir, rootDir)) {
+      const rel = normalizePath(realDir)
+        .slice(normalizePath(rootDir).replace(/\/+$/, '').length)
+        .replace(/^\/+/, '');
+      return rel ? `${rootName}/${rel}` : rootName;
+    }
+  }
+  return null;
+}
+
+async function confirmFolderRename(newName) {
+  const oldVirtual = renameTargetPath;
+  if (!oldVirtual) { hideRenameDialog(); return; }
+
+  const oldName = baseName(oldVirtual);
+  if (newName === oldName) { hideRenameDialog(); return; }
+
+  const oldReal = folderVirtualToReal(oldVirtual);
+  if (!oldReal) {
+    alert('目录路径无效');
+    hideRenameDialog();
+    return;
+  }
+
+  try {
+    const newReal = await invoke('rename_folder', {
+      oldPath: oldReal,
+      newName
+    });
+
+    const parentVirtual = oldVirtual.includes('/')
+      ? oldVirtual.slice(0, oldVirtual.lastIndexOf('/'))
+      : '';
+    const newVirtual = parentVirtual ? `${parentVirtual}/${newName}` : newName;
+
+    applyFolderRename(oldVirtual, newVirtual, oldReal, newReal, oldName, newName);
+
+    syncActiveNav();
+    renderFileList();
+    render();
+    updateFooter();
+    scheduleSave();
+    hideRenameDialog();
+    showToast('已重命名为「' + newName + '」');
+  } catch (err) {
+    alert('重命名失败：' + err);
+  }
+}
+
+async function confirmCreateFolder(name) {
+  const parentVirtual = renameTargetPath;
+  if (!parentVirtual) { hideRenameDialog(); return; }
+
+  const parentReal = folderVirtualToReal(parentVirtual);
+  if (!parentReal) {
+    alert('父目录路径无效');
+    hideRenameDialog();
+    return;
+  }
+
+  try {
+    await invoke('create_folder', {
+      parentDir: parentReal,
+      name
+    });
+
+    const newVirtual = `${parentVirtual}/${name}`;
+
+    const knownSet = new Set(state.settings.knownFolders || []);
+    knownSet.add(newVirtual);
+    state.settings.knownFolders = [...knownSet];
+
+    markFolderImported(newVirtual);
+
+    const expanded = new Set(state.settings.expandedFolders || []);
+    expanded.add(parentVirtual);
+    state.settings.expandedFolders = [...expanded];
+
+    renderFileList();
+    scheduleSave();
+    hideRenameDialog();
+    showToast('已创建「' + name + '」');
+  } catch (err) {
+    alert('创建失败：' + err);
+  }
+}
+
+function applyFolderRename(oldVirtual, newVirtual, oldReal, newReal, oldName, newName) {
+  /* 1. PHOTOS[].folder：虚拟路径前缀替换 */
+  PHOTOS.forEach(p => {
+    if (p.folder === oldVirtual) {
+      p.folder = newVirtual;
+    } else if (p.folder.startsWith(oldVirtual + '/')) {
+      p.folder = newVirtual + p.folder.slice(oldVirtual.length);
+    }
+  });
+
+  /* 2. PHOTOS[].path：物理路径前缀替换 */
+  const oldRealNorm = normalizePath(oldReal);
+  const newRealNorm = normalizePath(newReal);
+  const stamp = Date.now();
+
+  const cacheOldPaths = [];
+  const cacheNewPaths = [];
+
+  PHOTOS.forEach(p => {
+    const np = normalizePath(p.path);
+    if (np === oldRealNorm) {
+      cacheOldPaths.push(p.path);
+      cacheNewPaths.push(newReal);
+      p.path = newReal;
+      p.src = convertFileSrc(newReal) + '?t=' + stamp;
+      p.thumb = null;
+    } else if (np.startsWith(oldRealNorm + '/')) {
+      const newPath = newRealNorm + np.slice(oldRealNorm.length);
+      cacheOldPaths.push(p.path);
+      cacheNewPaths.push(newPath);
+      p.path = newPath;
+      p.src = convertFileSrc(newPath) + '?t=' + stamp;
+      p.thumb = null;
+    }
+  });
+
+  if (cacheOldPaths.length > 0) {
+    invoke('rename_thumbnail_cache', {
+      oldPaths: cacheOldPaths,
+      newPaths: cacheNewPaths,
+      size: THUMB_SIZE
+    }).catch(() => {});
+  }
+
+  /* 3. knownFolders 前缀替换 */
+  state.settings.knownFolders = (state.settings.knownFolders || []).map(n => {
+    if (n === oldVirtual) return newVirtual;
+    if (n.startsWith(oldVirtual + '/')) return newVirtual + n.slice(oldVirtual.length);
+    return n;
+  });
+
+  /* 4. expandedFolders 前缀替换 */
+  state.settings.expandedFolders = (state.settings.expandedFolders || []).map(n => {
+    if (n === oldVirtual) return newVirtual;
+    if (n.startsWith(oldVirtual + '/')) return newVirtual + n.slice(oldVirtual.length);
+    return n;
+  });
+
+  /* 5. folderImportTime 键名前缀替换 */
+  const newTimes = {};
+  for (const [key, val] of Object.entries(state.settings.folderImportTime || {})) {
+    if (key === oldVirtual) {
+      newTimes[newVirtual] = val;
+    } else if (key.startsWith(oldVirtual + '/')) {
+      newTimes[newVirtual + key.slice(oldVirtual.length)] = val;
+    } else {
+      newTimes[key] = val;
+    }
+  }
+  state.settings.folderImportTime = newTimes;
+
+  /* 6. 根目录：folderPaths 键名 + folderOrder */
+  if (!oldVirtual.includes('/')) {
+    if (state.settings.folderPaths[oldName]) {
+      delete state.settings.folderPaths[oldName];
+    }
+    state.settings.folderPaths[newName] = newReal;
+
+    state.settings.folderOrder = (state.settings.folderOrder || []).map(n =>
+      n === oldName ? newName : n
+    );
+  }
+
+  /* 7. 如果正在浏览的目录被改名，同步 state.folderName */
+  if (state.view === 'folder' && state.folderName) {
+    if (state.folderName === oldVirtual) {
+      state.folderName = newVirtual;
+    } else if (state.folderName.startsWith(oldVirtual + '/')) {
+      state.folderName = newVirtual + state.folderName.slice(oldVirtual.length);
+    }
+  }
 }
 
 /* =========================================================
@@ -1496,6 +2191,7 @@ function applyTheme() {
   moveDialog.classList.toggle('dark', dark);
   docsDialog.classList.toggle('dark', dark);
   aboutDialog.classList.toggle('dark', dark);
+  folderRemoveDialog.classList.toggle('dark', dark);
 }
 
 mq.addEventListener('change', () => {
@@ -1511,7 +2207,6 @@ themeSeg.addEventListener('click', e => {
   scheduleSave();
 });
 
-/* 渐变模式 */
 gradModeSeg.addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
@@ -1521,7 +2216,6 @@ gradModeSeg.addEventListener('click', e => {
   scheduleSave();
 });
 
-/* 渐变色 */
 gradColor1.addEventListener('input', () => {
   state.settings.gradColor1 = gradColor1.value;
   applyGradient();
@@ -1533,7 +2227,6 @@ gradColor2.addEventListener('input', () => {
   scheduleSave();
 });
 
-/* 毛玻璃 */
 acrylicSeg.addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
@@ -1543,14 +2236,12 @@ acrylicSeg.addEventListener('click', e => {
   scheduleSave();
 });
 
-/* 查看器背景虚化 */
 blurSwitch.addEventListener('change', () => {
   state.settings.blur = blurSwitch.checked;
   applyEffects();
   scheduleSave();
 });
 
-/* 清爽模式：关闭 / 局部开启 / 开启 */
 function compactModeOf() {
   if (state.settings.compact) return 'on';
   if (state.settings.hideDesc) return 'partial';
@@ -1593,7 +2284,6 @@ fontSelect.addEventListener('change', () => {
   scheduleSave();
 });
 
-/* 字体大小：小 / 中 / 大 */
 fontSizeSeg.addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
@@ -1679,8 +2369,8 @@ function applyCardSize() {
 }
 
 function applyCardRatio() {
-  const key = state.settings.cardRatio || '1:1';
-  const val = RATIOS[key] || RATIOS['1:1'];
+  const key = state.settings.cardRatio || '4:3';
+  const val = RATIOS[key] || RATIOS['4:3'];
   document.documentElement.style.setProperty('--card-ratio', val);
 }
 
@@ -1690,11 +2380,15 @@ function applyGradient() {
   const c1 = state.settings.gradColor1 || '#3B82F6';
   const c2 = state.settings.gradColor2 || '#06B6D4';
 
+  app.style.setProperty('--grad-angle', angle);
+  app.style.setProperty('--grad-color-1', c1);
+  app.style.setProperty('--grad-color-2', c2);
 }
+
 function applyEffects() {
   const acrylic = ACRYLICS.includes(state.settings.acrylic)
     ? state.settings.acrylic
-    : 'mid';
+    : 'low';
 
   app.dataset.acrylic = acrylic;
   document.body.classList.toggle('blur-off', !state.settings.blur);
@@ -1771,10 +2465,11 @@ document.getElementById('resetBtn').addEventListener('click', () => {
     expandedFolders: state.settings.expandedFolders || [],
     folderImportTime: state.settings.folderImportTime || {},
     folderSort: state.settings.folderSort || 'name',
-    folderPaths: state.settings.folderPaths || {}
+    folderPaths: state.settings.folderPaths || {},
+    folderOrder: state.settings.folderOrder || []
   };
 
-    state.settings = {
+  state.settings = {
     theme: 'system',
     gradMode: 'horizontal',
     gradColor1: '#3B82F6',
@@ -1836,14 +2531,14 @@ function syncSettingsUI() {
 
   [...themeSeg.children].forEach(b => b.classList.toggle('on', b.dataset.theme === s.theme));
 
-  const gradMode = GRAD_MODES[s.gradMode] ? s.gradMode : 'diagonal';
+  const gradMode = GRAD_MODES[s.gradMode] ? s.gradMode : 'horizontal';
   [...gradModeSeg.children].forEach(b => {
     b.classList.toggle('on', b.dataset.mode === gradMode);
   });
-  gradColor1.value = s.gradColor1 || '#4cc2ff';
-  gradColor2.value = s.gradColor2 || '#6b4bff';
+  gradColor1.value = s.gradColor1 || '#3B82F6';
+  gradColor2.value = s.gradColor2 || '#06B6D4';
 
-  const acrylic = ACRYLICS.includes(s.acrylic) ? s.acrylic : 'mid';
+  const acrylic = ACRYLICS.includes(s.acrylic) ? s.acrylic : 'low';
   [...acrylicSeg.children].forEach(b => {
     b.classList.toggle('on', b.dataset.acrylic === acrylic);
   });
@@ -1851,7 +2546,7 @@ function syncSettingsUI() {
   sizeRange.value = s.cardSize;
   sizeVal.textContent = s.cardSize;
 
-  const ratio = s.cardRatio || '1:1';
+  const ratio = s.cardRatio || '4:3';
   [...ratioSeg.children].forEach(b => {
     b.classList.toggle('on', b.dataset.ratio === ratio);
   });
@@ -1912,6 +2607,8 @@ aboutDialog.querySelector('.about-backdrop').addEventListener('click', hideAbout
    卡片交互
    ========================================================= */
 grid.addEventListener('click', e => {
+  if (suppressCardClick) return;
+
   const favBtn = e.target.closest('.fav-toggle');
   if (favBtn) {
     e.stopPropagation();
@@ -1965,7 +2662,6 @@ const VIEWER_ZOOM_STEP    = 0.08;
 const SLOW_ZOOM_STEP      = 0.02;
 const SLOW_ROTATE_SPEED   = 90;
 
-/* 不支持保存旋转的格式 */
 const ROTATE_UNSUPPORTED_EXTS = ['gif', 'svg'];
 
 let viewerZoom = VIEWER_ZOOM_DEFAULT;
@@ -2112,7 +2808,6 @@ function stopSlowRotate() {
   slowRotateDir = 0;
 }
 
-/* 把任意角度吸附到 {0, 90, 180, 270} */
 function snapRotation(deg) {
   const d = ((deg % 360) + 360) % 360;
   const snapped = Math.round(d / 90) * 90;
@@ -2157,7 +2852,6 @@ function showViewerBusy(on) {
   }
 }
 
-/* 保存旋转 */
 if (rotateSaveBtn) {
   rotateSaveBtn.addEventListener('click', async () => {
     const p = vList[vIdx];
@@ -2326,7 +3020,13 @@ document.getElementById('viewerRename').addEventListener('click', () => {
   const p = vList[vIdx];
   if (!p) return;
   const { base } = splitName(p.name);
+
+  renameDialogMode = 'file';
+  renameTargetPath = null;
+  renameTitleEl.textContent = '重命名';
+  renameInput.placeholder = '输入新的文件名';
   renameInput.value = base;
+
   renameDialog.hidden = false;
   requestAnimationFrame(() => {
     renameDialog.classList.add('show');
@@ -2517,8 +3217,15 @@ document.getElementById('moveConfirm').addEventListener('click', async () => {
   }
 
   try {
-    const newPath = await invoke('move_file', { src: p.path, dstDir });
+    const oldPath = p.path;
+    const newPath = await invoke('move_file', { src: oldPath, dstDir });
     hideMoveDialog();
+
+    invoke('rename_thumbnail_cache', {
+      oldPaths: [oldPath],
+      newPaths: [newPath],
+      size: THUMB_SIZE
+    }).catch(() => {});
 
     p.path = newPath;
     p.src = convertFileSrc(newPath) + '?t=' + Date.now();
@@ -2585,23 +3292,45 @@ document.getElementById('moveConfirm').addEventListener('click', async () => {
 });
 
 /* =========================================================
-   重命名对话框
+   重命名对话框（文件 / 文件夹 / 新建子目录共用）
    ========================================================= */
 function hideRenameDialog() {
   if (renameDialog.hidden) return;
   renameDialog.classList.remove('show');
   setTimeout(() => { renameDialog.hidden = true; }, 180);
+  renameDialogMode = 'file';
+  renameTargetPath = null;
 }
 
 async function confirmRename() {
-  const p = vList[vIdx];
-  if (!p) { hideRenameDialog(); return; }
-
-  const newBase = renameInput.value.trim();
-  if (!newBase) {
+  const value = renameInput.value.trim();
+  if (!value) {
     renameInput.focus();
     return;
   }
+
+  if (renameDialogMode === 'file') {
+    await confirmFileRename(value);
+  } else if (renameDialogMode === 'folder') {
+    if (!isValidFolderName(value)) {
+      alert('名称不能包含 \\ / : * ? " < > |');
+      renameInput.focus();
+      return;
+    }
+    await confirmFolderRename(value);
+  } else if (renameDialogMode === 'newFolder') {
+    if (!isValidFolderName(value)) {
+      alert('名称不能包含 \\ / : * ? " < > |');
+      renameInput.focus();
+      return;
+    }
+    await confirmCreateFolder(value);
+  }
+}
+
+async function confirmFileRename(newBase) {
+  const p = vList[vIdx];
+  if (!p) { hideRenameDialog(); return; }
 
   const { ext } = splitName(p.name);
   const newName = newBase + ext;
@@ -2612,10 +3341,17 @@ async function confirmRename() {
   }
 
   try {
+    const oldPath = p.path;
     const newPath = await invoke('rename_file', {
-      oldPath: p.path,
+      oldPath,
       newName: newBase
     });
+
+    invoke('rename_thumbnail_cache', {
+      oldPaths: [oldPath],
+      newPaths: [newPath],
+      size: THUMB_SIZE
+    }).catch(() => {});
 
     p.name = newName;
     p.path = newPath;
@@ -2651,7 +3387,6 @@ renameInput.addEventListener('keydown', e => {
    全局键盘
    ========================================================= */
 document.addEventListener('keydown', e => {
-  /* 关于 */
   if (!aboutDialog.hidden) {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -2660,7 +3395,6 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  /* 使用文档 */
   if (!docsDialog.hidden) {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -2669,11 +3403,18 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  /* 移动到对话框：只处理 Esc */
   if (!moveDialog.hidden) {
     if (e.key === 'Escape') {
       e.preventDefault();
       hideMoveDialog();
+    }
+    return;
+  }
+
+  if (!folderRemoveDialog.hidden) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      hideFolderRemoveDialog();
     }
     return;
   }

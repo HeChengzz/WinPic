@@ -5,7 +5,6 @@ use image::{ImageFormat, ImageReader};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri::Manager;
 
 /* =========================================================
 平台特定实现
@@ -58,6 +57,30 @@ mod win {
 /* =========================================================
 通用工具
 ========================================================= */
+
+/// exe 所在目录
+fn exe_dir() -> Result<PathBuf, String> {
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("无法获取 exe 路径：{}", e))?;
+    exe.parent()
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| "无法获取 exe 目录".to_string())
+}
+
+/// 数据根目录：<exe目录>/data
+fn data_dir() -> Result<PathBuf, String> {
+    Ok(exe_dir()?.join("data"))
+}
+
+/// 缩略图缓存目录：<exe目录>/data/thumbnails
+fn thumb_cache_dir() -> Result<PathBuf, String> {
+    Ok(data_dir()?.join("thumbnails"))
+}
+
+/// 状态文件路径：<exe目录>/data/state.json
+fn state_file() -> Result<PathBuf, String> {
+    Ok(data_dir()?.join("state.json"))
+}
 
 /// 生成"先写临时文件再原子替换"的路径
 fn tmp_path_for(src: &Path) -> Result<PathBuf, String> {
@@ -131,7 +154,7 @@ fn open_with(path: String) -> Result<(), String> {
 }
 
 /* =========================================================
-命令：重命名
+命令：重命名文件
 ========================================================= */
 #[tauri::command]
 fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
@@ -157,15 +180,73 @@ fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
 }
 
 /* =========================================================
+命令：重命名文件夹
+========================================================= */
+#[tauri::command]
+fn rename_folder(old_path: String, new_name: String) -> Result<String, String> {
+    let p = PathBuf::from(&old_path);
+    if !p.is_dir() {
+        return Err("目标不是目录".into());
+    }
+
+    if new_name.is_empty() {
+        return Err("名称不能为空".into());
+    }
+    if new_name == "." || new_name == ".." {
+        return Err("名称无效".into());
+    }
+    if new_name.contains(|c: char| "\\/:*?\"<>|".contains(c)) {
+        return Err("名称不能包含 \\ / : * ? \" < > |".into());
+    }
+
+    let parent = p.parent().ok_or_else(|| "无法获取父目录".to_string())?;
+    let new_path = parent.join(&new_name);
+
+    if new_path.exists() {
+        return Err(format!("「{}」已存在", new_name));
+    }
+
+    fs::rename(&p, &new_path).map_err(|e| format!("重命名失败：{}", e))?;
+
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+/* =========================================================
+命令：新建文件夹
+========================================================= */
+#[tauri::command]
+fn create_folder(parent_dir: String, name: String) -> Result<String, String> {
+    let parent = PathBuf::from(&parent_dir);
+    if !parent.is_dir() {
+        return Err("父目录不存在".into());
+    }
+
+    if name.is_empty() {
+        return Err("名称不能为空".into());
+    }
+    if name == "." || name == ".." {
+        return Err("名称无效".into());
+    }
+    if name.contains(|c: char| "\\/:*?\"<>|".contains(c)) {
+        return Err("名称不能包含 \\ / : * ? \" < > |".into());
+    }
+
+    let new_path = parent.join(&name);
+    if new_path.exists() {
+        return Err(format!("「{}」已存在", name));
+    }
+
+    fs::create_dir(&new_path).map_err(|e| format!("创建目录失败：{}", e))?;
+
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+/* =========================================================
 命令：缩略图（带磁盘缓存）
 ========================================================= */
 #[tauri::command]
-async fn get_thumbnail(app: tauri::AppHandle, path: String, size: u32) -> Result<String, String> {
-    let cache_dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("thumbnails");
+async fn get_thumbnail(path: String, size: u32) -> Result<String, String> {
+    let cache_dir = thumb_cache_dir()?;
     fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
 
     let mtime = fs::metadata(&path)
@@ -203,6 +284,52 @@ async fn get_thumbnail(app: tauri::AppHandle, path: String, size: u32) -> Result
     .map_err(|e| e.to_string())??;
 
     Ok(cache_path.to_string_lossy().to_string())
+}
+
+/* =========================================================
+命令：重命名后复用缩略图缓存
+========================================================= */
+#[tauri::command]
+fn rename_thumbnail_cache(
+    old_paths: Vec<String>,
+    new_paths: Vec<String>,
+    size: u32,
+) -> Result<(), String> {
+    if old_paths.len() != new_paths.len() {
+        return Err("参数长度不匹配".into());
+    }
+
+    let cache_dir = thumb_cache_dir()?;
+    if !cache_dir.exists() {
+        return Ok(());
+    }
+
+    for i in 0..old_paths.len() {
+        let old_path = &old_paths[i];
+        let new_path = &new_paths[i];
+
+        let mtime = match fs::metadata(new_path) {
+            Ok(m) => m
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+            Err(_) => continue,
+        };
+
+        let old_key = format!("{}_{}_{}", simple_hash(old_path), mtime, size);
+        let new_key = format!("{}_{}_{}", simple_hash(new_path), mtime, size);
+
+        let old_cache = cache_dir.join(format!("{}.jpg", old_key));
+        let new_cache = cache_dir.join(format!("{}.jpg", new_key));
+
+        if old_cache.exists() && !new_cache.exists() {
+            let _ = fs::rename(&old_cache, &new_cache);
+        }
+    }
+
+    Ok(())
 }
 
 /* =========================================================
@@ -272,7 +399,6 @@ fn move_file(src: String, dst_dir: String) -> Result<String, String> {
 
     let mut dst = dst_dir_path.join(&file_name);
 
-    // 处理重名：追加 (1)、(2)…
     if dst.exists() {
         let stem = PathBuf::from(&file_name)
             .file_stem()
@@ -295,7 +421,6 @@ fn move_file(src: String, dst_dir: String) -> Result<String, String> {
         }
     }
 
-    // 先试 rename；跨盘失败回退 copy + remove
     if fs::rename(&src_path, &dst).is_err() {
         fs::copy(&src_path, &dst).map_err(|e| e.to_string())?;
         fs::remove_file(&src_path).map_err(|e| e.to_string())?;
@@ -330,21 +455,59 @@ fn rotate_image(path: String, degrees: u16) -> Result<(), String> {
         .map_err(|e| format!("解码失败：{}", e))?;
 
     let rotated = match deg {
-        90 => img.rotate90(),
+        90  => img.rotate90(),
         180 => img.rotate180(),
         270 => img.rotate270(),
-        _ => unreachable!(),
+        _   => unreachable!(),
     };
 
-    let format = ImageFormat::from_path(&src).map_err(|e| format!("无法识别图片格式：{}", e))?;
+    let format = ImageFormat::from_path(&src)
+        .map_err(|e| format!("无法识别图片格式：{}", e))?;
 
-    // 先编码到内存，再原子写入，避免半途失败损坏原文件
     let mut buf: Vec<u8> = Vec::new();
     rotated
         .write_to(&mut std::io::Cursor::new(&mut buf), format)
         .map_err(|e| format!("编码失败：{}", e))?;
 
     write_atomic(&src, &buf)
+}
+
+/* =========================================================
+命令：读取状态文件
+========================================================= */
+#[tauri::command]
+fn load_state_file() -> Result<Option<String>, String> {
+    let path = state_file()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|e| format!("读取状态文件失败：{}", e))
+}
+
+/* =========================================================
+命令：写入状态文件
+========================================================= */
+#[tauri::command]
+fn save_state_file(content: String) -> Result<(), String> {
+    let path = state_file()?;
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("创建数据目录失败：{}", e))?;
+    }
+
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, content.as_bytes())
+        .map_err(|e| format!("写入失败：{}", e))?;
+
+    if let Err(e) = fs::rename(&tmp, &path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(format!("替换状态文件失败：{}", e));
+    }
+
+    Ok(())
 }
 
 /* =========================================================
@@ -357,16 +520,19 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            // 文件系统
             get_thumbnail,
+            rename_thumbnail_cache,
             rename_file,
+            rename_folder,
+            create_folder,
             move_file,
             delete_to_trash,
             reveal_in_explorer,
             rotate_image,
-            // 系统集成
             set_wallpaper,
             open_with,
+            load_state_file,
+            save_state_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

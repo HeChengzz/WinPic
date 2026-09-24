@@ -363,14 +363,15 @@ body {
 .folder-item.active .folder-name { font-weight: 600; }
 
 .file-tail {
-  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1px;
   margin-left: auto;
-  width: 22px; height: 22px;
-  flex: 0 0 22px;
+  flex-shrink: 0;
 }
-.file-tail .file-remove {
-  position: absolute;
-  inset: 0;
+.file-tail > button {
+  width: 18px;
+  height: 18px;
   display: grid;
   place-items: center;
   border-radius: 4px;
@@ -382,10 +383,14 @@ body {
   padding: 0;
   transition: opacity .15s, background .15s, color .15s;
 }
-.file-tail .file-remove svg { width: 11px; height: 11px; }
-.folder-item:hover .file-tail .file-remove { opacity: 1; }
+.file-tail > button svg { width: 10px; height: 10px; }
+.folder-item:hover .file-tail > button { opacity: 1; }
 .file-tail .file-remove:hover { background: rgba(196, 43, 28, .16); color: #c42b1c; }
-
+.file-tail .file-rename:hover,
+.file-tail .file-add:hover {
+  background: var(--hover);
+  color: var(--text-primary);
+}
 .nav-empty {
   font-size: calc(12px * var(--fs-scale));
   color: var(--text-tertiary);
@@ -2228,4 +2233,267 @@ body.dark .import-menu-item svg { color: #cfcfcf; }
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* =========================================================
+   目录拖动排序
+   ========================================================= */
+
+/* 自定义模式下，根目录可拖 */
+body.folder-custom .folder-item[data-root="1"] {
+  cursor: grab;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+body.folder-custom .folder-item[data-root="1"]:active {
+  cursor: grabbing;
+}
+
+/* 拖动时整片目录区禁止选中 */
+body.folder-dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+body.folder-dragging .folder-item {
+  cursor: grabbing !important;
+}
+/* 正在被拖动的那一项 */
+.folder-item.dragging {
+  opacity: 0.35;
+}
+
+/* 插入位置提示线（上） */
+.folder-item.drop-before::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -1px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+/* 插入位置提示线（下） */
+.folder-item.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+/* =========================================================
+   图片拖动到目录
+   ========================================================= */
+
+/* 拖动时跟随鼠标的浮动缩略图 */
+.drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  opacity: .92;
+  transform: translate(-50%, -50%);
+  transition: opacity .12s;
+}
+
+.drag-ghost img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 拖动中：全局禁止选中，光标变抓 */
+body.card-dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+body.card-dragging,
+body.card-dragging .card {
+  cursor: grabbing !important;
+}
+
+/* 目标目录高亮 */
+.folder-item.drop-target {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+.folder-item.drop-target .folder-ico,
+.folder-item.drop-target .folder-name {
+  color: #fff !important;
+}
+.folder-item.drop-target .file-remove {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+/* =========================================================
+   移除文件夹对话框
+   ========================================================= */
+.folder-remove-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 218;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+.folder-remove-dialog.show { opacity: 1; }
+.folder-remove-dialog[hidden] { display: none; }
+
+.folder-remove-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(16, 16, 18, 0.45);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+}
+
+.folder-remove-box {
+  position: relative;
+  z-index: 1;
+  width: 400px;
+  max-width: 90vw;
+  padding: 20px;
+  border-radius: 10px;
+  background: var(--setting-card);
+  backdrop-filter: blur(40px) saturate(160%);
+  -webkit-backdrop-filter: blur(40px) saturate(160%);
+  border: 1px solid var(--stroke);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .35);
+  animation: boxIn .2s cubic-bezier(.2, .9, .3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.folder-remove-title {
+  font-size: calc(15px * var(--fs-scale));
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.folder-remove-name {
+  font-size: calc(13px * var(--fs-scale));
+  color: var(--text-secondary);
+  word-break: break-all;
+  margin-top: -4px;
+}
+
+.folder-remove-hint {
+  font-size: calc(12px * var(--fs-scale));
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+
+.folder-remove-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.folder-remove-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--input-border);
+  background: var(--surface);
+  border-radius: 8px;
+  font: inherit;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+.folder-remove-option:hover {
+  background: var(--hover);
+  border-color: var(--input-underline);
+}
+.folder-remove-option:active { transform: scale(.985); }
+
+.folder-remove-option svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: var(--text-secondary);
+}
+
+.folder-remove-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.folder-remove-option-text span {
+  font-size: calc(13px * var(--fs-scale));
+  font-weight: 600;
+}
+.folder-remove-option-text small {
+  font-size: calc(11.5px * var(--fs-scale));
+  color: var(--text-tertiary);
+}
+
+.folder-remove-option.danger {
+  color: #c42b1c;
+  border-color: rgba(196, 43, 28, .3);
+}
+.folder-remove-option.danger:hover {
+  background: rgba(196, 43, 28, .08);
+  border-color: rgba(196, 43, 28, .5);
+}
+.folder-remove-option.danger svg { color: #c42b1c; }
+.folder-remove-option.danger .folder-remove-option-text small {
+  color: rgba(196, 43, 28, .8);
+}
+
+.app.dark .folder-remove-option.danger { color: #ff99a4; border-color: rgba(255, 153, 164, .3); }
+.app.dark .folder-remove-option.danger:hover {
+  background: rgba(255, 153, 164, .1);
+  border-color: rgba(255, 153, 164, .5);
+}
+.app.dark .folder-remove-option.danger svg { color: #ff99a4; }
+.app.dark .folder-remove-option.danger .folder-remove-option-text small {
+  color: rgba(255, 153, 164, .75);
+}
+
+.folder-remove-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.folder-remove-dialog.dark {
+  --accent: #4cc2ff;
+  --text-primary: #ffffff;
+  --text-secondary: #cfcfcf;
+  --text-tertiary: #9f9f9f;
+  --stroke: rgba(255, 255, 255, 0.09);
+  --hover: rgba(255, 255, 255, 0.06);
+  --surface: rgba(255, 255, 255, 0.07);
+  --input-border: rgba(255, 255, 255, 0.11);
+  --input-underline: rgba(255, 255, 255, 0.32);
+  --setting-card: rgba(255, 255, 255, 0.05);
+}
+.folder-remove-dialog.dark .folder-remove-backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+.folder-remove-dialog.dark .folder-remove-box {
+  background: rgba(44, 44, 46, 0.82);
+  border-color: rgba(255, 255, 255, 0.08);
 }
